@@ -1,6 +1,5 @@
 import socket, os
 from pathlib import Path
-from utils.dialogs import ask_user_confirmation
 from tkinter import messagebox
 
 

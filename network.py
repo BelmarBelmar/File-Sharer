@@ -3,15 +3,31 @@ import ipaddress
 
 def is_port_open(ip, port, timeout=0.5):
     """Teste si le port est ouvert sur l'IP donnée"""
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    result = s.connect_ex((str(ip), port))
-    s.close()
-    return result == 0
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        result = s.connect_ex((str(ip), port))
+        s.close()
+        return result == 0
+    except Exception:
+        return False
+
+def scan_ip(ip, port):
+    """
+    Scanne une seule IP pour vérifier si elle écoute sur le port donné.
+    """
+    print(f"🔍 Scan de l'IP {ip} sur le port {port}...")
+    if is_port_open(ip, port):
+        print(f"✅ Pair trouvé à {ip}")
+        return [str(ip)]
+    else:
+        print(f"❌ {ip} : port fermé ou pair non trouvé")
+        return []
 
 def scan_network(network_cidr, port):
     """
-    Scanne toutes les IP d'un réseau donné (au format CIDR, ex: '192.168.1.0/24')
+    Scanne toutes les IP d'un réseau donné (au format CIDR, ex : '192.168.1.0/24')
     et affiche celles qui ont le port spécifié ouvert.
     """
     print(f"🔍 Scan du réseau {network_cidr} sur le port {port}...\n")
