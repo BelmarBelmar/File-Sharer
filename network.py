@@ -1,4 +1,3 @@
-
 import socket
 import ipaddress
 import subprocess
@@ -23,6 +22,10 @@ def get_local_network():
                 net = ipaddress.ip_network(f"{ip}/{mask}", strict=False)
                 print(f"[NETWORK] Réseau détecté : {net}")
                 return str(net)
+            print("[ERROR] Aucun IP ou masque détecté")
+            return None
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Erreur d'exécution d'ipconfig : {e}")
             return None
         except Exception as e:
             print(f"[ERROR] Erreur lors de la détection du réseau : {e}")
@@ -36,12 +39,16 @@ def get_local_network():
                     net = ipaddress.ip_network(ip_mask, strict=False)
                     print(f"[NETWORK] Réseau détecté : {net}")
                     return str(net)
+            print("[ERROR] Aucun réseau détecté sur wlan0 ou eth0")
+            return None
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Erreur d'exécution de ip addr : {e}")
             return None
         except Exception as e:
             print(f"[ERROR] Erreur lors de la détection du réseau : {e}")
             return None
 
-def is_port_open(ip, port, timeout=0.3):
+def is_port_open(ip, port, timeout=2.0):  # Augmenté à 2 secondes
     """
     Teste si le port est ouvert sur l'IP donnée.
     """
@@ -68,11 +75,20 @@ def scan_ip(ip, port):
         return str(ip)
     return None
 
-def scan_network(network_cidr, port=5001, max_workers=50):
+def scan_network(network_cidr=None, port=5001, max_workers=50):
     """
     Scanne toutes les IP d'un réseau donné et affiche celles avec le port ouvert.
+    Si network_cidr n'est pas fourni, détecte automatiquement le réseau local.
     """
-    print(f"🔍 Scan du réseau {network_cidr} sur le port {port}...")
+    print(f"🔍 Scan du réseau sur le port {port}...")
+    if network_cidr is None:
+        network_cidr = get_local_network()
+        if not network_cidr:
+            print("[ERROR] Détection réseau échouée, utilisation de 127.0.0.1/32 par défaut")
+            network_cidr = "127.0.0.1/32"
+    if not network_cidr:
+        print("[ERROR] Réseau non détecté ou invalide")
+        return []
     try:
         net = ipaddress.ip_network(network_cidr, strict=False)
     except ValueError as e:
@@ -80,22 +96,29 @@ def scan_network(network_cidr, port=5001, max_workers=50):
         return []
 
     found = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(scan_ip, ip, port) for ip in net.hosts()]
-        for future in tqdm(futures, total=len(futures), desc="Scan en cours"):
-            result = future.result()
-            if result:
-                print(f"✅ Faire trouvé : {result}")
-                found.append(result)
+    # Forcer le scan de 127.0.0.1 comme fallback
+    if "127.0.0.1/32" in network_cidr and is_port_open("127.0.0.1", port):
+        found.append("127.0.0.1")
+        print(f"✅ Pair trouvé : 127.0.0.1")
 
-    print("\n✅ Scan terminé.")
-    print(f"Pairs détectés : {found}")
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(scan_ip, ip, port) for ip in net.hosts()]
+            for future in tqdm(futures, total=len(futures), desc="Scan en cours"):
+                result = future.result()
+                if result:
+                    print(f"✅ Pair trouvé : {result}")
+                    found.append(result)
+    except Exception as e:
+        print(f"[ERROR] Erreur pendant le scan : {e}")
+        return found  # Retourne ce qui a été trouvé jusqu'à l'erreur
+
+    if not found:
+        print("[INFO] Aucun pair trouvé sur le port 5001. Assurez-vous que socket_server est lancé.")
+    else:
+        print("\n✅ Scan terminé.")
+        print(f"Pairs détectés : {found}")
     return found
 
 if __name__ == "__main__":
-    # Détecter automatiquement le réseau local
-    network = get_local_network()
-    if not network:
-        network = "127.0.0.1/32"  # Valeur par défaut pour tests locaux
-        print(f"⚠️ Détection automatique échouée, utilisation du réseau par défaut : {network}")
-    scan_network(network, port=5001)
+    scan_network(port=5001)

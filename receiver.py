@@ -4,6 +4,9 @@ import socket
 from tkinter import messagebox
 from tqdm import tqdm
 
+class ReceptionCancelled:
+    pass
+
 # Constantes configurables
 BUFFER_SIZE = 4096
 SAVE_FOLDER = "~/Downloads/files_shared"
@@ -74,3 +77,5 @@ def receive_file(conn, addr, save_folder=SAVE_FOLDER):
     finally:
         if conn:
             conn.close()
+
+
