@@ -12,6 +12,7 @@ def get_local_network():
     if platform.system() == "Windows":
         try:
             output = subprocess.check_output("ipconfig", shell=True).decode("cp850", errors="ignore")
+            print("[DEBUG] Sortie brute d'ipconfig :", output)  # Débogage
             ip, mask = None, None
             for line in output.splitlines():
                 if "Adresse IPv4" in line:
@@ -48,7 +49,7 @@ def get_local_network():
             print(f"[ERROR] Erreur lors de la détection du réseau : {e}")
             return None
 
-def is_port_open(ip, port, timeout=2.0):  # Augmenté à 2 secondes
+def is_port_open(ip, port, timeout=2.0):
     """
     Teste si le port est ouvert sur l'IP donnée.
     """
@@ -84,8 +85,8 @@ def scan_network(network_cidr=None, port=5001, max_workers=50):
     if network_cidr is None:
         network_cidr = get_local_network()
         if not network_cidr:
-            print("[ERROR] Détection réseau échouée, utilisation de 127.0.0.1/32 par défaut")
-            network_cidr = "127.0.0.1/32"
+            print("[WARNING] Détection réseau échouée, forçage vers 192.168.1.0/24 pour test")
+            network_cidr = "192.168.1.0/24"  # Forcer une plage courante pour tester
     if not network_cidr:
         print("[ERROR] Réseau non détecté ou invalide")
         return []
@@ -96,7 +97,6 @@ def scan_network(network_cidr=None, port=5001, max_workers=50):
         return []
 
     found = []
-    # Forcer le scan de 127.0.0.1 comme fallback
     if "127.0.0.1/32" in network_cidr and is_port_open("127.0.0.1", port):
         found.append("127.0.0.1")
         print(f"✅ Pair trouvé : 127.0.0.1")
@@ -111,13 +111,13 @@ def scan_network(network_cidr=None, port=5001, max_workers=50):
                     found.append(result)
     except Exception as e:
         print(f"[ERROR] Erreur pendant le scan : {e}")
-        return found  # Retourne ce qui a été trouvé jusqu'à l'erreur
+        return found
 
     if not found:
         print("[INFO] Aucun pair trouvé sur le port 5001. Assurez-vous que socket_server est lancé.")
     else:
         print("\n✅ Scan terminé.")
-        print(f"Pairs détectés : {found}")
+        print(f"Pairs détectées : {found}")
     return found
 
 if __name__ == "__main__":

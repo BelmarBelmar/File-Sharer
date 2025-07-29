@@ -24,157 +24,112 @@ class FileSharerGUI:
         # Référence au thread de réception et drapeau d'annulation
         self.receive_thread = None
         self.cancel_flag = Event()
-        self.is_receiving = False  # Nouvel attribut pour suivre l'état
-        self.selected_path = None  # Attribut pour stocker le chemin sélectionné
-        self.file_path = None  # Attribut pour le chemin du fichier/dossier à envoyer
-        self.ip_placeholder = "Entrez une IP (ex. 192.168.1.1)..."  # Placeholder mis à jour
+        self.is_receiving = False
+        self.selected_path = None
+        self.file_path = None
+        self.ip_placeholder = "Choisir un destinataire..."
 
-        # Label principal
+        # Nouvel attribut pour le nom de l'utilisateur et la map nom-IP
+        self.user_name = None
+        self.ip_name_map = {}  # Dictionnaire {nom: IP}
+        self.local_ip = self.get_local_ip()
+
+        # Initialisation des éléments d'interface ici pour éviter l'erreur
         self.label = ctk.CTkLabel(
-            root,
-            text="File Sharer",
-            font=("Arial", 24, "bold"),
-            text_color="#FFFFFF"
+            self.root, text="File Sharer", font=("Arial", 24, "bold"), text_color="#FFFFFF"
         )
         self.label.pack(pady=30)
 
-        # Frame pour les boutons
-        self.button_frame = ctk.CTkFrame(root, fg_color="transparent")
-        self.button_frame.pack(pady=(100, 10))  # Marge supérieure augmentée
+        self.button_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.button_frame.pack(pady=(100, 10))
 
-        # Bouton Envoyer
         self.send_button = ctk.CTkButton(
-            self.button_frame,
-            text="⬆ Envoyer",
-            command=self.prepare_send,
-            fg_color="#1E90FF",
-            hover_color="#4682B4",
-            font=("Arial", 16),
-            width=150
+            self.button_frame, text="⬆ Envoyer", command=self.prepare_send,
+            fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 16), width=150
         )
         self.send_button.pack(side="left", padx=5)
 
-        # Bouton Recevoir
         self.receive_button = ctk.CTkButton(
-            self.button_frame,
-            text="⬇ Recevoir",
-            command=self.start_receive,
-            fg_color="#1E90FF",
-            hover_color="#4682B4",
-            font=("Arial", 16),
-            width=150
+            self.button_frame, text="⬇ Recevoir", command=self.start_receive,
+            fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 16), width=150
         )
         self.receive_button.pack(side="left", padx=5)
 
-        # Bouton Historique
         self.history_button = ctk.CTkButton(
-            self.button_frame,
-            text="Historique",
-            command=self.show_history,
-            fg_color="#FFD700",
-            hover_color="#FFA500",
-            font=("Arial", 16),
-            width=150
+            self.button_frame, text="Historique", command=self.show_history,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 16), width=150
         )
         self.history_button.pack(side="left", padx=5)
 
-        # Bouton Scanner
         self.scan_button = ctk.CTkButton(
-            self.button_frame,
-            text="Scanner",
-            command=self.scan_networks,
-            fg_color="#FFD700",
-            hover_color="#FFA500",
-            font=("Arial", 16),
-            width=150
+            self.button_frame, text="Scanner", command=self.scan_networks,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 16), width=150
         )
         self.scan_button.pack(side="left", padx=5)
 
-        # Label d'état
         self.status_label = ctk.CTkLabel(
-            root,
-            text="Choisissez une action",
-            font=("Arial", 14),
-            text_color="#87CEEB"
+            self.root, text="Choisissez une action", font=("Arial", 14), text_color="#87CEEB"
         )
         self.status_label.pack(pady=20)
 
-        # Widgets pour l'envoi
-        self.ip_label = ctk.CTkLabel(
-            root,
-            text="Adresse IP de destination :",
-            font=("Arial", 14),
-            text_color="#FFFFFF"
-        )
+        self.ip_label = ctk.CTkLabel(self.root, text="Destinataire :", font=("Arial", 14), text_color="#FFFFFF")
         self.ip_dropdown = ctk.CTkComboBox(
-            root,
-            values=[self.ip_placeholder],  # Initialiser avec le placeholder
-            font=("Arial", 14),
-            width=250,
-            fg_color="#1E90FF",
-            button_color="#4682B4",
-            dropdown_fg_color="#2B2B2B"
+            self.root, values=[self.ip_placeholder], font=("Arial", 14), width=250,
+            fg_color="#1E90FF", button_color="#4682B4", dropdown_fg_color="#2B2B2B"
         )
-        self.ip_dropdown.set(self.ip_placeholder)  # Définir le placeholder comme valeur initiale
-        self.ip_dropdown.bind("<FocusIn>", self._clear_placeholder)  # Effacer le placeholder quand cliqué
+        self.ip_dropdown.set(self.ip_placeholder)
+        self.ip_dropdown.bind("<FocusIn>", self._clear_placeholder)
         self.confirm_send_button = ctk.CTkButton(
-            root,
-            text="Confirmer l'envoi",
-            command=self.start_send,
-            fg_color="#1E90FF",
-            hover_color="#4682B4",
-            font=("Arial", 14),
-            width=200
+            self.root, text="Confirmer l'envoi", command=self.start_send,
+            fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 14), width=200
         )
         self.cancel_button = ctk.CTkButton(
-            root,
-            text="Annuler",
-            command=self.reset_interface,
-            fg_color="#FF4500",
-            hover_color="#FF6347",
-            font=("Arial", 14),
-            width=200
+            self.root, text="Annuler", command=self.reset_interface,
+            fg_color="#FF4500", hover_color="#FF6347", font=("Arial", 14), width=200
         )
-        # Nouveau bouton Annuler pour réception
         self.cancel_receive_button = ctk.CTkButton(
-            root,
-            text="Annuler la réception",
-            command=self.cancel_receive,
-            fg_color="#FF4500",
-            hover_color="#FF6347",
-            font=("Arial", 14),
-            width=200
+            self.root, text="Annuler la réception", command=self.cancel_receive,
+            fg_color="#FF4500", hover_color="#FF6347", font=("Arial", 14), width=200
         )
-        # Nouveaux boutons pour choisir fichier ou dossier
         self.send_file_button = ctk.CTkButton(
-            root,
-            text="Envoyer un fichier",
-            command=self.select_file,
-            fg_color="#1E90FF",
-            hover_color="#4682B4",
-            font=("Arial", 14),
-            width=200
+            self.root, text="Envoyer un fichier", command=self.select_file,
+            fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 14), width=200
         )
         self.send_folder_button = ctk.CTkButton(
-            root,
-            text="Envoyer un dossier",
-            command=self.select_folder,
-            fg_color="#1E90FF",
-            hover_color="#4682B4",
-            font=("Arial", 14),
-            width=200
+            self.root, text="Envoyer un dossier", command=self.select_folder,
+            fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 14), width=200
         )
-        # Label pour afficher le chemin sélectionné
-        self.selected_label = ctk.CTkLabel(
-            root,
-            text="",
-            font=("Arial", 12),
-            text_color="#FFFFFF"
-        )
+        self.selected_label = ctk.CTkLabel(self.root, text="", font=("Arial", 12), text_color="#FFFFFF")
+
+        # Lancer le serveur socket en arrière-plan
+        self.server_thread = threading.Thread(target=self.run_socket_server, daemon=True)
+        self.server_thread.start()
+
+        # Fenêtre de saisie simplifiée avec nom par défaut
+        self.name_window = ctk.CTkToplevel(self.root)
+        self.name_window.title("Définir votre nom")
+        self.name_window.geometry("300x150")
+        default_name = f"User_{self.local_ip.split('.')[-1]}"
+        ctk.CTkLabel(self.name_window, text="Nom par défaut :").pack(pady=5)
+        self.name_entry = ctk.CTkEntry(self.name_window, width=200)
+        self.name_entry.insert(0, default_name)  # Pré-remplir avec le nom par défaut
+        self.name_entry.pack(pady=10)
+        ctk.CTkButton(self.name_window, text="Valider", command=self.set_name).pack(pady=10)
+
+    def set_name(self):
+        base_name = self.name_entry.get().strip()
+        if not base_name:
+            messagebox.showwarning("Attention", "Veuillez entrer un nom !")
+            return
+        self.user_name = base_name
+        self.ip_name_map[self.user_name] = self.local_ip
+        self.broadcast_name()
+        self.name_window.destroy()
+        self.button_frame.pack(pady=(100, 10))  # Afficher les boutons après validation
 
     def _clear_placeholder(self, event):
         if self.ip_dropdown.get() == self.ip_placeholder:
-            self.ip_dropdown.set("")  # Effacer le placeholder quand l'utilisateur clique
+            self.ip_dropdown.set("")
 
     def prepare_send(self):
         self.update_status("Choisissez de envoyer un fichier ou un dossier...", "#87CEEB")
@@ -186,18 +141,17 @@ class FileSharerGUI:
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
         file_path = filedialog.askopenfilename(
-            title="Choisir un fichier",
-            initialdir=os.path.expanduser("~/Desktop"),
+            title="Choisir un fichier", initialdir=os.path.expanduser("~/Desktop"),
             filetypes=[("Tous les fichiers", "*.*"), ("Documents", "*.pdf *.docx *.txt"), ("Images", "*.jpg *.png")]
         )
         if not file_path:
             self.reset_interface()
             return
         self.selected_path = file_path
-        self.file_path = file_path  # Mettre à jour file_path pour les fichiers
+        self.file_path = file_path
         self.selected_label.configure(text=f"Sélectionné : {os.path.basename(file_path)}")
         self.selected_label.pack(pady=5)
-        self._auto_scan_network()  # Lancer le scan automatiquement
+        self.scan_networks()  # Remplacer _auto_scan_network par scan_networks manuel
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
@@ -208,14 +162,12 @@ class FileSharerGUI:
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
         folder_path = filedialog.askdirectory(
-            title="Choisir un dossier",
-            initialdir=os.path.expanduser("~/Desktop")
+            title="Choisir un dossier", initialdir=os.path.expanduser("~/Desktop")
         )
         if not folder_path:
             self.reset_interface()
             return
         self.selected_path = folder_path
-        # Compresser le dossier en ZIP temporairement
         import zipfile
         temp_zip = os.path.join(os.path.dirname(folder_path), "temp_send.zip")
         with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -223,10 +175,10 @@ class FileSharerGUI:
                 for file in files:
                     file_path = os.path.join(root, file)
                     zipf.write(file_path, os.path.relpath(file_path, os.path.dirname(folder_path)))
-        self.file_path = temp_zip  # Utiliser le ZIP comme fichier à envoyer
+        self.file_path = temp_zip
         self.selected_label.configure(text=f"Sélectionné : {os.path.basename(folder_path)}")
         self.selected_label.pack(pady=5)
-        self._auto_scan_network()  # Lancer le scan automatiquement
+        self.scan_networks()  # Remplacer _auto_scan_network par scan_networks manuel
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
@@ -235,12 +187,12 @@ class FileSharerGUI:
 
     def _auto_scan_network(self):
         self.update_status("Scanning réseau automatiquement...", "#87CEEB")
-        self.scan_button.configure(state="disabled")  # Désactiver le bouton pendant le scan auto
+        self.scan_button.configure(state="disabled")
         threading.Thread(target=self._perform_auto_scan, daemon=True).start()
 
     def _perform_auto_scan(self):
         try:
-            active_devices = scan_network(port=5001)
+            active_devices = scan_network("192.168.1.0/24", port=5001)
             if not isinstance(active_devices, list):
                 raise ValueError("Les appareils renvoyés ne sont pas une liste valide")
             self.root.after(0, lambda: self._update_scan_results(active_devices))
@@ -252,55 +204,86 @@ class FileSharerGUI:
 
     def scan_networks(self):
         self.update_status("Scanning réseau manuellement...", "#87CEEB")
-        self.scan_button.configure(state="disabled")  # Désactiver le bouton pendant le scan manuel
+        self.scan_button.configure(state="disabled")
         threading.Thread(target=self._perform_auto_scan, daemon=True).start()
 
     def _update_scan_results(self, active_devices):
-        if active_devices and all(isinstance(device, tuple) and len(device) == 2 for device in active_devices):
-            device_strings = [f"{device[1]}:{device[0]}" for device in active_devices]  # Format "IP:nom"
-            self.ip_dropdown.configure(values=device_strings)
-            if self.ip_dropdown.get() == self.ip_placeholder:
-                self.ip_dropdown.set("")  # Effacer le placeholder si aucune IP n'est entrée
-            self.update_status(f"{len(active_devices)} appareil(s) détecté(s)", "#32CD32")
+        if active_devices and all(isinstance(device, str) for device in active_devices):
+            self.ip_name_map[self.user_name] = self.local_ip
+            self.broadcast_name()
+            device_names = []
+            for ip in active_devices:
+                for name, mapped_ip in self.ip_name_map.items():
+                    if mapped_ip == ip and name != self.user_name:
+                        if name not in device_names:
+                            device_names.append(name)
+                if ip not in [mapped_ip for _, mapped_ip in self.ip_name_map.items()] and ip != self.local_ip:
+                    default_name = f"Appareil_{ip.split('.')[-1]}"
+                    if default_name not in device_names:
+                        device_names.append(default_name)
+                        self.ip_name_map[default_name] = ip
+            if self.user_name not in device_names and len(active_devices) > 1:
+                device_names.append(self.user_name)
+            options = [self.ip_placeholder] + sorted(device_names)
+            self.ip_dropdown.configure(values=options)
+            if self.ip_dropdown.get() == self.ip_placeholder or not self.ip_dropdown.get():
+                self.ip_dropdown.set("")
+            self.update_status(f"{len(active_devices)} appareil(s) détecté(s) - Noms: {', '.join(device_names)}", "#32CD32")
         else:
             self.ip_dropdown.configure(values=[self.ip_placeholder])
             self.ip_dropdown.set(self.ip_placeholder)
             self.update_status("Aucun appareil trouvé ou erreur de détection", "#FF4500")
 
+    def get_local_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        return ip
+
+    def run_socket_server(self):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind(("", 5002))
+        while True:
+            data, addr = server_socket.recvfrom(1024)
+            name_ip = data.decode().split(":")
+            if len(name_ip) == 2:
+                self.ip_name_map[name_ip[0]] = name_ip[1]
+                self.root.after(0, self._update_scan_results, [ip for ip in self.ip_name_map.values() if ip != self.local_ip])
+
+    def broadcast_name(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        message = f"{self.user_name}:{self.local_ip}"
+        sock.sendto(message.encode(), ('<broadcast>', 5002))
+        sock.close()
+
     def start_send(self):
-        ip = self.ip_dropdown.get()
-        if not ip or ip == self.ip_placeholder:
-            messagebox.showerror("Erreur", "Veuillez entrer ou sélectionner une adresse IP.")
-            self.update_status("Erreur : Aucune IP sélectionnée", "#FF4500")
+        target_name = self.ip_dropdown.get()
+        if not target_name or target_name == self.ip_placeholder:
+            messagebox.showerror("Erreur", "Veuillez sélectionner un destinataire.")
+            self.update_status("Erreur : Aucun destinataire sélectionné", "#FF4500")
             return
 
-        # Extraire l'IP de "IP:nom" si sélectionnée, sinon valider comme IP
-        if ':' in ip:
-            ip = ip.split(':')[0]  # Prendre seulement l'IP
-        else:
-            # Validation de l'IP
-            ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-            if not re.match(ip_pattern, ip):
-                messagebox.showerror("Erreur", "Veuillez entrer une adresse IP valide.")
-                self.update_status("Erreur : Entrée non valide, une IP est requise", "#FF4500")
-                return
-            octets = ip.split('.')
-            if not all(0 <= int(octet) <= 255 for octet in octets):
-                messagebox.showerror("Erreur", "Chaque octet doit être entre 0 et 255.")
-                self.update_status("Erreur : IP invalide", "#FF4500")
-                return
+        target_ip = self.ip_name_map.get(target_name)
+        if not target_ip:
+            messagebox.showerror("Erreur", "Destinataire non trouvé.")
+            self.update_status("Erreur : Destinataire non valide", "#FF4500")
+            return
 
         self.update_status("Envoi en cours...", "#87CEEB")
         if self.file_path is None:
             messagebox.showerror("Erreur", "Aucun fichier ou dossier sélectionné.")
             self.update_status("Erreur : Aucun fichier/dossier sélectionné", "#FF4500")
             return
-        threading.Thread(target=self._send_file_thread, args=(self.file_path, ip, 5001), daemon=True).start()
+        threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001), daemon=True).start()
 
     def _send_file_thread(self, file_path, ip, port):
         try:
             send_file(file_path, ip, port)
-            # Nettoyer le fichier ZIP temporaire si c'était un dossier
             if file_path.endswith(".zip") and os.path.exists(file_path):
                 os.remove(file_path)
             self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
@@ -319,10 +302,9 @@ class FileSharerGUI:
         self.confirm_send_button.pack_forget()
         self.cancel_button.pack_forget()
         self.update_status("En attente d'un fichier...", "#87CEEB")
-        self.cancel_flag.clear()  # Réinitialiser le drapeau
-        self.cancel_receive_button.pack(pady=10)  # Afficher le bouton Annuler
+        self.cancel_flag.clear()
+        self.cancel_receive_button.pack(pady=10)
         self.is_receiving = True
-        # Ajouter une tentative de rebinding si le port est occupé
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -333,7 +315,7 @@ class FileSharerGUI:
                 if "Address already in use" in str(e) or "[Errno 98]" in str(e):
                     if attempt < max_attempts - 1:
                         self.update_status(f"Port occupé, réessai {attempt + 1}/{max_attempts}...", "#FFA500")
-                        time.sleep(2)  # Attendre 2 secondes avant de réessayer
+                        time.sleep(2)
                     else:
                         self.update_status("Port occupé après plusieurs tentatives. Relancez l'application.", "#FF4500")
                         self.is_receiving = False
@@ -344,10 +326,10 @@ class FileSharerGUI:
 
     def cancel_receive(self):
         if self.receive_thread and self.receive_thread.is_alive():
-            self.cancel_flag.set()  # Définir le drapeau d'annulation
+            self.cancel_flag.set()
             self.update_status("Annulation en cours...", "#FFA500")
-            self.cancel_receive_button.configure(state="disabled")  # Désactiver pendant l'annulation
-            self.receive_thread.join(timeout=2)  # Attendre un maximum de 2 secondes
+            self.cancel_receive_button.configure(state="disabled")
+            self.receive_thread.join(timeout=2)
             if self.receive_thread.is_alive():
                 self.update_status("Annulation forcée, veuillez relancer.", "#FF4500")
             else:
@@ -376,7 +358,7 @@ class FileSharerGUI:
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
         self.selected_label.pack_forget()
-        self.button_frame.pack(pady=(100, 10))  # Réappliquer la marge supérieure
+        self.button_frame.pack(pady=(100, 10))
         self.update_status("Choisissez une action", "#87CEEB")
 
     def show_history(self):
@@ -386,12 +368,8 @@ class FileSharerGUI:
         history_window.resizable(False, False)
 
         history_text = ctk.CTkTextbox(
-            history_window,
-            font=("Arial", 12),
-            width=450,
-            height=250,
-            fg_color="#2B2B2B",
-            text_color="#FFFFFF"
+            history_window, font=("Arial", 12), width=450, height=250,
+            fg_color="#2B2B2B", text_color="#FFFFFF"
         )
         history_text.pack(pady=10, padx=10)
 
@@ -406,3 +384,8 @@ class FileSharerGUI:
 
     def update_status(self, message, color):
         self.status_label.configure(text=message, text_color=color)
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    app = FileSharerGUI(root)
+    root.mainloop()
