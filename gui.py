@@ -1,16 +1,18 @@
-import customtkinter as ctk
+import os
 from tkinter import filedialog, messagebox, Toplevel
+import customtkinter as ctk
 from sender import send_file
 from receiver import receive_file, ReceptionCancelled
 from utils.utils import load_history
 from network import scan_network
 import threading
-import os
 import traceback
 from threading import Event
 import time
 import re
 import socket
+
+CONFIG_FILE = "user_config.txt"
 
 class FileSharerGUI:
     def __init__(self, root):
@@ -67,6 +69,12 @@ class FileSharerGUI:
         )
         self.scan_button.pack(side="left", padx=5)
 
+        self.change_name_button = ctk.CTkButton(
+            self.button_frame, text="Changer de nom", command=self.change_name,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 16), width=150
+        )
+        self.change_name_button.pack(side="left", padx=5)
+
         self.status_label = ctk.CTkLabel(
             self.root, text="Choisissez une action", font=("Arial", 14), text_color="#87CEEB"
         )
@@ -105,27 +113,62 @@ class FileSharerGUI:
         self.server_thread = threading.Thread(target=self.run_socket_server, daemon=True)
         self.server_thread.start()
 
-        # Fenêtre de saisie simplifiée avec nom par défaut
-        self.name_window = ctk.CTkToplevel(self.root)
-        self.name_window.title("Définir votre nom")
-        self.name_window.geometry("300x150")
-        default_name = f"User_{self.local_ip.split('.')[-1]}"
-        ctk.CTkLabel(self.name_window, text="Nom par défaut :").pack(pady=5)
-        self.name_entry = ctk.CTkEntry(self.name_window, width=200)
-        self.name_entry.insert(0, default_name)  # Pré-remplir avec le nom par défaut
-        self.name_entry.pack(pady=10)
-        ctk.CTkButton(self.name_window, text="Valider", command=self.set_name).pack(pady=10)
+        # Charger ou définir le nom au démarrage
+        self.load_or_set_user_name()
 
-    def set_name(self):
+    def load_or_set_user_name(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                self.user_name = f.read().strip()
+        else:
+            self.name_window = ctk.CTkToplevel(self.root)
+            self.name_window.title("Définir votre nom")
+            self.name_window.geometry("300x150")
+            default_name = f"User_{self.local_ip.split('.')[-1]}"
+            ctk.CTkLabel(self.name_window, text="Entrez votre nom (sauvegardé pour les prochaines utilisations) :").pack(pady=5)
+            self.name_entry = ctk.CTkEntry(self.name_window, width=200)
+            self.name_entry.insert(0, default_name)
+            self.name_entry.pack(pady=10)
+            ctk.CTkButton(self.name_window, text="Valider", command=self._save_name).pack(pady=10)
+            self.name_window.grab_set()
+            self.root.wait_window(self.name_window)
+        self.ip_name_map[self.user_name] = self.local_ip
+        self.broadcast_name()
+
+    def _save_name(self):
         base_name = self.name_entry.get().strip()
         if not base_name:
             messagebox.showwarning("Attention", "Veuillez entrer un nom !")
             return
         self.user_name = base_name
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            f.write(self.user_name)
+        self.name_window.destroy()
+        self.button_frame.pack(pady=(100, 10))
+
+    def change_name(self):
+        self.name_window = ctk.CTkToplevel(self.root)
+        self.name_window.title("Changer votre nom")
+        self.name_window.geometry("300x150")
+        ctk.CTkLabel(self.name_window, text="Entrez un nouveau nom :").pack(pady=5)
+        name_entry = ctk.CTkEntry(self.name_window, width=200)
+        name_entry.insert(0, self.user_name or f"User_{self.local_ip.split('.')[-1]}")
+        name_entry.pack(pady=10)
+        ctk.CTkButton(self.name_window, text="Valider", command=lambda: self._update_name(name_entry.get())).pack(pady=10)
+        self.name_window.grab_set()
+        self.root.wait_window(self.name_window)
+
+    def _update_name(self, new_name):
+        if not new_name.strip():
+            messagebox.showwarning("Attention", "Veuillez entrer un nom !")
+            return
+        self.user_name = new_name.strip()
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            f.write(self.user_name)
         self.ip_name_map[self.user_name] = self.local_ip
         self.broadcast_name()
         self.name_window.destroy()
-        self.button_frame.pack(pady=(100, 10))  # Afficher les boutons après validation
+        messagebox.showinfo("Succès", f"Nom mis à jour : {self.user_name}")
 
     def _clear_placeholder(self, event):
         if self.ip_dropdown.get() == self.ip_placeholder:
@@ -151,7 +194,7 @@ class FileSharerGUI:
         self.file_path = file_path
         self.selected_label.configure(text=f"Sélectionné : {os.path.basename(file_path)}")
         self.selected_label.pack(pady=5)
-        self.scan_networks()  # Remplacer _auto_scan_network par scan_networks manuel
+        self.scan_networks()
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
@@ -178,7 +221,7 @@ class FileSharerGUI:
         self.file_path = temp_zip
         self.selected_label.configure(text=f"Sélectionné : {os.path.basename(folder_path)}")
         self.selected_label.pack(pady=5)
-        self.scan_networks()  # Remplacer _auto_scan_network par scan_networks manuel
+        self.scan_networks()
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
@@ -226,7 +269,6 @@ class FileSharerGUI:
                     device_names.append(default_name)
                     self.ip_name_map[default_name] = ip
 
-        # Filtrer les None et trier uniquement les chaînes valides
         device_names = [name for name in device_names if name is not None]
         if not device_names:
             self.ip_dropdown.configure(values=[self.ip_placeholder])
@@ -260,13 +302,12 @@ class FileSharerGUI:
                 name_ip = data.decode().split(":")
                 if len(name_ip) == 2 and all(name_ip) and name_ip[1] != self.local_ip:
                     self.ip_name_map[name_ip[0]] = name_ip[1]
-                    # Mettre à jour seulement si le dictionnaire a changé
                     if self.ip_name_map != last_map:
                         active_ips = [ip for ip in self.ip_name_map.values() if ip != self.local_ip]
                         self.root.after(0, lambda: self._update_scan_results(active_ips))
                         last_map = self.ip_name_map.copy()
             except (ValueError, UnicodeDecodeError):
-                continue  # Ignorer les données mal formées
+                continue
 
     def broadcast_name(self):
         if not self.user_name or not self.local_ip:
@@ -295,11 +336,11 @@ class FileSharerGUI:
             messagebox.showerror("Erreur", "Aucun fichier ou dossier sélectionné.")
             self.update_status("Erreur : Aucun fichier/dossier sélectionné", "#FF4500")
             return
-        threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001), daemon=True).start()
+        threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001, self.user_name), daemon=True).start()
 
-    def _send_file_thread(self, file_path, ip, port):
+    def _send_file_thread(self, file_path, ip, port, user_name):
         try:
-            send_file(file_path, ip, port)
+            send_file(file_path, ip, port, user_name)  # Ajuster send_file pour accepter user_name
             if file_path.endswith(".zip") and os.path.exists(file_path):
                 os.remove(file_path)
             self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
