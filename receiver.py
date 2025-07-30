@@ -5,13 +5,10 @@ from tkinter import messagebox
 from tqdm import tqdm
 from threading import Event
 
-
 class ReceptionCancelled(Exception):
     pass
 
-
 BUFFER_SIZE = 4096
-
 
 def receive_file(port, cancel_flag):
     """
@@ -52,10 +49,29 @@ def receive_file(port, cancel_flag):
 
             try:
                 # Recevoir les métadonnées (nom du fichier et taille)
-                meta = conn.recv(BUFFER_SIZE).decode()
-                file_name, file_size = meta.split("||")
-                file_size = int(file_size)
-                print(f"[RÉCEPTEUR] Fichier proposé : {file_name} ({file_size} octets)")
+                meta = ""
+                while "||" not in meta and len(meta) < 4096:  # Ajout pour gérer la réception partielle
+                    data = conn.recv(BUFFER_SIZE)
+                    if not data:
+                        break
+                    meta += data.decode()
+                if "||" not in meta:  # Ajout pour valider les métadonnées
+                    print(f"[ERREUR] Métadonnées invalides reçues : {meta}")
+                    messagebox.showerror("Erreur", f"Métadonnées invalides : {meta}. Attendu 'nom||taille'.")
+                    conn.send("REJECTED".encode())
+                    conn.close()
+                    continue
+                print(f"[DEBUG] Métadonnées reçues : {meta}")  # Ajout pour débogage
+                try:
+                    file_name, file_size = meta.split("||")
+                    file_size = int(file_size)
+                    print(f"[RÉCEPTEUR] Fichier proposé : {file_name} ({file_size} octets)")
+                except ValueError as e:
+                    print(f"[ERREUR] Erreur dans les métadonnées pour {addr[0]} : {e} - Données reçues : {meta}")
+                    messagebox.showerror("Erreur", f"Erreur dans les métadonnées : {str(e)} - Données : {meta}")
+                    conn.send("REJECTED".encode())
+                    conn.close()
+                    continue
 
                 # Demander confirmation à l'utilisateur
                 response = messagebox.askyesno(
