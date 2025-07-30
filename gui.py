@@ -34,7 +34,7 @@ class FileSharerGUI:
         self.ip_name_map = {}  # Dictionnaire {nom: IP}
         self.local_ip = self.get_local_ip()
 
-        # Initialisation des éléments d'interface ici pour éviter l'erreur
+        # Initialisation des éléments d'interface
         self.label = ctk.CTkLabel(
             self.root, text="File Sharer", font=("Arial", 24, "bold"), text_color="#FFFFFF"
         )
@@ -185,11 +185,6 @@ class FileSharerGUI:
         self.cancel_button.pack(pady=10)
         self.update_status("Choisissez un appareil ou scannez le réseau...", "#87CEEB")
 
-    def _auto_scan_network(self):
-        self.update_status("Scanning réseau automatiquement...", "#87CEEB")
-        self.scan_button.configure(state="disabled")
-        threading.Thread(target=self._perform_auto_scan, daemon=True).start()
-
     def _perform_auto_scan(self):
         try:
             active_devices = scan_network("192.168.1.0/24", port=5001)
@@ -208,31 +203,42 @@ class FileSharerGUI:
         threading.Thread(target=self._perform_auto_scan, daemon=True).start()
 
     def _update_scan_results(self, active_devices):
-        if active_devices and all(isinstance(device, str) for device in active_devices):
-            self.ip_name_map[self.user_name] = self.local_ip
-            self.broadcast_name()
-            device_names = []
-            for ip in active_devices:
-                for name, mapped_ip in self.ip_name_map.items():
-                    if mapped_ip == ip and name != self.user_name:
-                        if name not in device_names:
-                            device_names.append(name)
-                if ip not in [mapped_ip for _, mapped_ip in self.ip_name_map.items()] and ip != self.local_ip:
-                    default_name = f"Appareil_{ip.split('.')[-1]}"
-                    if default_name not in device_names:
-                        device_names.append(default_name)
-                        self.ip_name_map[default_name] = ip
-            if self.user_name not in device_names and len(active_devices) > 1:
-                device_names.append(self.user_name)
-            options = [self.ip_placeholder] + sorted(device_names)
-            self.ip_dropdown.configure(values=options)
-            if self.ip_dropdown.get() == self.ip_placeholder or not self.ip_dropdown.get():
-                self.ip_dropdown.set("")
-            self.update_status(f"{len(active_devices)} appareil(s) détecté(s) - Noms: {', '.join(device_names)}", "#32CD32")
-        else:
+        if not active_devices or not all(isinstance(device, str) for device in active_devices):
             self.ip_dropdown.configure(values=[self.ip_placeholder])
             self.ip_dropdown.set(self.ip_placeholder)
             self.update_status("Aucun appareil trouvé ou erreur de détection", "#FF4500")
+            return
+
+        if self.user_name and self.local_ip:
+            self.ip_name_map[self.user_name] = self.local_ip
+            self.broadcast_name()
+
+        device_names = []
+        for ip in active_devices:
+            if ip == self.local_ip:
+                continue
+            for name, mapped_ip in list(self.ip_name_map.items()):
+                if mapped_ip == ip and name != self.user_name and name not in device_names:
+                    device_names.append(name)
+            if ip not in [mapped_ip for _, mapped_ip in self.ip_name_map.items()]:
+                default_name = f"Appareil_{ip.split('.')[-1]}"
+                if default_name not in device_names:
+                    device_names.append(default_name)
+                    self.ip_name_map[default_name] = ip
+
+        # Filtrer les None et trier uniquement les chaînes valides
+        device_names = [name for name in device_names if name is not None]
+        if not device_names:
+            self.ip_dropdown.configure(values=[self.ip_placeholder])
+            self.ip_dropdown.set(self.ip_placeholder)
+            self.update_status("Aucun nom d'appareil détecté", "#FF4500")
+            return
+
+        options = [self.ip_placeholder] + sorted(device_names)
+        self.ip_dropdown.configure(values=options)
+        if not self.ip_dropdown.get() or self.ip_dropdown.get() == self.ip_placeholder:
+            self.ip_dropdown.set("")
+        self.update_status(f"{len(active_devices)} appareil(s) détecté(s) - Noms: {', '.join(device_names)}", "#32CD32")
 
     def get_local_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -247,14 +253,24 @@ class FileSharerGUI:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(("", 5002))
+        last_map = {}
         while True:
             data, addr = server_socket.recvfrom(1024)
-            name_ip = data.decode().split(":")
-            if len(name_ip) == 2:
-                self.ip_name_map[name_ip[0]] = name_ip[1]
-                self.root.after(0, self._update_scan_results, [ip for ip in self.ip_name_map.values() if ip != self.local_ip])
+            try:
+                name_ip = data.decode().split(":")
+                if len(name_ip) == 2 and all(name_ip) and name_ip[1] != self.local_ip:
+                    self.ip_name_map[name_ip[0]] = name_ip[1]
+                    # Mettre à jour seulement si le dictionnaire a changé
+                    if self.ip_name_map != last_map:
+                        active_ips = [ip for ip in self.ip_name_map.values() if ip != self.local_ip]
+                        self.root.after(0, lambda: self._update_scan_results(active_ips))
+                        last_map = self.ip_name_map.copy()
+            except (ValueError, UnicodeDecodeError):
+                continue  # Ignorer les données mal formées
 
     def broadcast_name(self):
+        if not self.user_name or not self.local_ip:
+            return
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         message = f"{self.user_name}:{self.local_ip}"
