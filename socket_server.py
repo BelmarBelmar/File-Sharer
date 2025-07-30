@@ -1,11 +1,10 @@
+'''
+
 import socket
 from tkinter import messagebox
 
 def start_server(ip="0.0.0.0", port=5001):
-    """
-    Ouvre un socket serveur sur le port donné et reste en écoute pour les connexions.
-    Le serveur reste actif jusqu'à une interruption (Ctrl+C).
-    """
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -34,3 +33,4 @@ def start_server(ip="0.0.0.0", port=5001):
 
 if __name__ == "__main__":
     start_server()
+'''
