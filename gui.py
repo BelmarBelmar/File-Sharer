@@ -12,6 +12,7 @@ import time
 import re
 import socket
 
+
 CONFIG_FILE = "user_config.txt"
 
 class FileSharerGUI:
@@ -350,11 +351,14 @@ class FileSharerGUI:
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            send_file(file_path, ip, port, user_name, update_progress)
-            if file_path.endswith(".zip") and os.path.exists(file_path):
-                os.remove(file_path)
-            self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
-            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
+            success = send_file(file_path, ip, port, user_name, update_progress)
+            if success:
+                if file_path.endswith(".zip") and os.path.exists(file_path):
+                    os.remove(file_path)
+                    self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
+                    self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
+            else:
+                self.root.after(0, lambda: self.update_status("Transfert échoué ou refusé.", "#FF4500"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
@@ -362,6 +366,12 @@ class FileSharerGUI:
 
     def _hide_progress(self):
         self.progress_label.pack_forget()
+
+    """def confirmation_via_gui(file_name, file_size, sender_name):
+        return messagebox.askyesno("Confirmation",
+                                   f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {sender_name} ?"))
+
+    RECEIVER_CONFIRMATION_CALLBACK = confirmation_via_gui"""
 
     def start_receive(self):
         if self.is_receiving:
@@ -416,16 +426,19 @@ class FileSharerGUI:
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            receive_file(port, cancel_flag, update_progress)
-            self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
-            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
+            success = receive_file(port, cancel_flag, update_progress)
+            if success:
+                self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
+                self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
+            else:
+                self.root.after(0, lambda: self.update_status("Réception échouée ou annulée.", "#FF4500"))
         except ReceptionCancelled:
-            self.root.after(0, lambda: self.update_status("Réception annulée.", "#32CD32"))
+            self.root.after(0, lambda: self.update_status("Réception annulée par l'utilisateur.", "#FF4500"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
             self.is_receiving = False
-            self.root.after(0, self._hide_progress)  # Masquer après réception
+            self.root.after(0, self._hide_progress)
 
     def reset_interface(self):
         self.ip_label.pack_forget()
