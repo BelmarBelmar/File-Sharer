@@ -5,13 +5,10 @@ from tkinter import messagebox
 from tqdm import tqdm
 from threading import Event
 
-
 class ReceptionCancelled(Exception):
     pass
 
-
 BUFFER_SIZE = 4096
-
 
 def receive_file(port, cancel_flag):
     """
@@ -51,21 +48,25 @@ def receive_file(port, cancel_flag):
             os.makedirs(save_folder, exist_ok=True)
 
             try:
-                # Recevoir les métadonnées (nom du fichier et taille)
+                # Recevoir les métadonnées (nom du fichier, taille, et nom de l'utilisateur)
                 meta = conn.recv(BUFFER_SIZE).decode()
-                file_name, file_size = meta.split("||")
+                if "||" not in meta or meta.count("||") < 2:
+                    conn.send("REJECTED".encode())
+                    conn.close()
+                    continue
+                file_name, file_size, user_name = meta.split("||", 2)  # Sépare en 3 parties max
                 file_size = int(file_size)
-                print(f"[RÉCEPTEUR] Fichier proposé : {file_name} ({file_size} octets)")
+                print(f"[RÉCEPTEUR] Fichier proposé par {user_name} : {file_name} ({file_size} octets)")
 
                 # Demander confirmation à l'utilisateur
                 response = messagebox.askyesno(
                     "Confirmation",
-                    f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {addr[0]} ?"
+                    f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {user_name} ({addr[0]}) ?"
                 )
                 if not response:
                     conn.send("REJECTED".encode())
                     conn.close()
-                    print(f"[RÉCEPTEUR] Téléchargement refusé pour {file_name} de {addr[0]}")
+                    print(f"[RÉCEPTEUR] Téléchargement refusé pour {file_name} de {user_name}")
                     continue
                 conn.send("OK".encode())
 
@@ -88,11 +89,11 @@ def receive_file(port, cancel_flag):
 
                 conn.close()
                 if received == file_size:
-                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès")
-                    messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé.")
+                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès de {user_name}")
+                    messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé de {user_name}.")
                 else:
-                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets)")
-                    messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement.")
+                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets) de {user_name}")
+                    messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement de {user_name}.")
 
             except socket.error as e:
                 print(f"[ERREUR] Erreur réseau pour {addr[0]} : {e}")
@@ -101,6 +102,12 @@ def receive_file(port, cancel_flag):
                 print(f"[RÉCEPTEUR] {str(e)}")
                 if os.path.exists(file_path):
                     os.remove(file_path)
+            except ValueError as e:
+                print(f"[ERREUR] Erreur dans les métadonnées pour {addr[0]} : {e} - Données : {meta}")
+                messagebox.showerror("Erreur", f"Erreur dans les métadonnées : {str(e)}")
+                conn.send("REJECTED".encode())
+                conn.close()
+                continue
             finally:
                 if 'conn' in locals() and conn:
                     conn.close()

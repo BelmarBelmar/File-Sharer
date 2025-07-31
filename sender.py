@@ -1,12 +1,11 @@
-
 import socket
 import os
 from tkinter import messagebox
 from tqdm import tqdm
 
-def send_file(file_path, ip, port=5001):
+def send_file(file_path, ip, port=5001, user_name=None):
     """
-    Envoie un fichier à l'IP et au port spécifiés.
+    Envoie un fichier à l'IP et au port spécifiés avec le nom de l'utilisateur.
     """
     if not os.path.exists(file_path):
         messagebox.showerror("Erreur", f"Le fichier {file_path} n'existe pas.")
@@ -17,10 +16,10 @@ def send_file(file_path, ip, port=5001):
         # Se connecter au serveur
         sock.connect((ip, port))
 
-        # Envoyer les métadonnées (nom du fichier et taille)
+        # Envoyer les métadonnées (nom du fichier, taille, et nom de l'utilisateur)
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
-        meta = f"{file_name}||{file_size}"
+        meta = f"{file_name}||{file_size}||{user_name or 'Anonymous'}"
         sock.send(meta.encode())
 
         # Attendre confirmation
@@ -37,7 +36,7 @@ def send_file(file_path, ip, port=5001):
                 sock.send(chunk)
                 pbar.update(len(chunk))
 
-        messagebox.showinfo("Succès", f"Fichier {file_name} envoyé avec succès.")
+        messagebox.showinfo("Succès", f"Fichier {file_name} envoyé avec succès par {user_name or 'Anonymous'}.")
     except socket.error as e:
         messagebox.showerror("Erreur", f"Erreur réseau : {str(e)}")
     except Exception as e:
