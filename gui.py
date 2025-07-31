@@ -461,8 +461,7 @@ class FileSharerGUI:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                self.receive_thread = threading.Thread(target=self._receive_file_thread,
-                                                       args=(5001, self.cancel_flag, save_folder), daemon=True)
+                self.receive_thread = threading.Thread(target=self._receive_file_thread,args=(5001, self.cancel_flag, save_folder), daemon=True)
                 self.receive_thread.start()
                 break
             except OSError as e:
@@ -549,54 +548,58 @@ class FileSharerGUI:
 
         history = load_history()
         if not history:
-            ctk.CTkLabel(history_frame, text="Aucun fichier reçu dans l'historique.", font=("Arial", 12),
+            ctk.CTkLabel(history_frame, text="Aucun transfert dans l'historique.", font=("Arial", 12),
                          text_color="#FFFFFF").pack(pady=5)
         else:
-            received_files = [entry for entry in history if entry.get('operation') == 'received']
-            if not received_files:
-                ctk.CTkLabel(history_frame, text="Aucun fichier reçu dans l'historique.", font=("Arial", 12),
-                             text_color="#FFFFFF").pack(pady=5)
+            transfers = [entry for entry in history if entry.get('operation') in ['received', 'sent']]
+            if not transfers:
+                ctk.CTkLabel(history_frame, text="Aucun transfert (envoyé ou reçu) dans l'historique.",
+                             font=("Arial", 12), text_color="#FFFFFF").pack(pady=5)
             else:
-                for entry in received_files:
+                for entry in transfers:
                     frame = ctk.CTkFrame(history_frame)
                     frame.pack(fill="x", pady=2, padx=5)
 
-                    file_name = entry['file_name']
-                    label = ctk.CTkLabel(frame, text=file_name, font=("Arial", 12), text_color="#FFFFFF")
+                    operation = "Reçu" if entry.get('operation') == 'received' else "Envoyé"
+                    file_name = entry.get('file_name', 'Inconnu')
+                    timestamp = entry.get('timestamp', 'Inconnu')
+                    label = ctk.CTkLabel(frame, text=f"{operation} : {file_name} ({timestamp})", font=("Arial", 12),
+                                         text_color="#FFFFFF")
                     label.pack(side="left", padx=5)
 
-                    # Bouton pour ouvrir le fichier
-                    def open_file(file_name=file_name):
-                        home_dir = os.path.expanduser("~")
-                        download_folders = ["Downloads", "Téléchargements"]
-                        save_folder_base = None
-                        for folder in download_folders:
-                            potential_folder = os.path.join(home_dir, folder)
-                            if os.path.isdir(potential_folder):
-                                save_folder_base = potential_folder
-                                break
-                        if save_folder_base is None:
-                            save_folder_base = home_dir
-                        save_folder = os.path.join(save_folder_base, "files_shared")
-                        file_path = os.path.join(save_folder, file_name)
-                        print(f"Chemin vérifié : {file_path}")  # Pour débogage
-                        if os.path.exists(file_path):
-                            try:
-                                if os.name == 'nt':  # Windows
-                                    os.startfile(file_path)
-                                else:  # macOS/Linux
-                                    subprocess.run([
-                                                       'open' if os.name == 'posix' and os.uname().sysname == 'Darwin' else 'xdg-open',
-                                                       file_path])
-                            except Exception as e:
-                                messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
-                        else:
-                            messagebox.showwarning("Attention",
-                                                   f"Le fichier {file_name} n'a pas été trouvé à {file_path}.")
+                    # Bouton pour ouvrir le fichier (uniquement pour les reçus)
+                    if entry.get('operation') == 'received':
+                        def open_file(file_name=file_name):
+                            home_dir = os.path.expanduser("~")
+                            download_folders = ["Downloads", "Téléchargements"]
+                            save_folder_base = None
+                            for folder in download_folders:
+                                potential_folder = os.path.join(home_dir, folder)
+                                if os.path.isdir(potential_folder):
+                                    save_folder_base = potential_folder
+                                    break
+                            if save_folder_base is None:
+                                save_folder_base = home_dir
+                            save_folder = os.path.join(save_folder_base, "files_shared")
+                            file_path = os.path.join(save_folder, file_name)
+                            print(f"Chemin vérifié : {file_path}")  # Pour débogage
+                            if os.path.exists(file_path):
+                                try:
+                                    if os.name == 'nt':  # Windows
+                                        os.startfile(file_path)
+                                    else:  # macOS/Linux
+                                        subprocess.run([
+                                                           'open' if os.name == 'posix' and os.uname().sysname == 'Darwin' else 'xdg-open',
+                                                           file_path])
+                                except Exception as e:
+                                    messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
+                            else:
+                                messagebox.showwarning("Attention",
+                                                       f"Le fichier {file_name} n'a pas été trouvé à {file_path}.")
 
-                    open_button = ctk.CTkButton(frame, text="Ouvrir", command=open_file, fg_color="#1E90FF",
-                                                hover_color="#4682B4", font=("Arial", 12), width=60)
-                    open_button.pack(side="right", padx=5)
+                        open_button = ctk.CTkButton(frame, text="Ouvrir", command=open_file, fg_color="#1E90FF",
+                                                    hover_color="#4682B4", font=("Arial", 12), width=60)
+                        open_button.pack(side="right", padx=5)
 
         # Bouton de retour
         back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",

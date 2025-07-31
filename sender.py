@@ -2,6 +2,7 @@ import socket
 import os
 from tkinter import messagebox
 from tqdm import tqdm
+from utils.utils import save_history
 
 CONFIG_FILE = "user_config.txt"
 
@@ -51,6 +52,7 @@ def send_file(file_path, ip, port=5001, user_name=None, update_callback=None):
                     update_callback(percentage)
 
         messagebox.showinfo("Succès", f"Fichier {file_name} envoyé avec succès par {user_name}.")
+        save_history("sent", file_name, ip)
     except socket.error as e:
         messagebox.showerror("Erreur", f"Erreur réseau : {str(e)}")
     except Exception as e:

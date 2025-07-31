@@ -4,6 +4,7 @@ import socket
 from tkinter import messagebox, Tk, filedialog
 from tqdm import tqdm
 from threading import Event
+from utils.utils import save_history
 
 CONFIG_FILE = "user_config.txt"
 
@@ -104,6 +105,7 @@ def receive_file(port, cancel_flag, update_callback=None, save_folder=None):
                     if received == file_size:
                         print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès de {sender_name}")
                         messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé dans {save_folder_base}.")
+                        save_history("received", file_name, addr[0])
                     else:
                         print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets) de {sender_name}")
                         messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement.")
