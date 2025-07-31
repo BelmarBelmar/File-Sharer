@@ -80,6 +80,12 @@ class FileSharerGUI:
         )
         self.status_label.pack(pady=20)
 
+        # Label de progression masqué par défaut
+        self.progress_label = ctk.CTkLabel(
+            self.root, text="Progression : 0%", font=("Arial", 14), text_color="#87CEEB"
+        )
+        # Ne pas packer ici, sera affiché uniquement pendant l'envoi ou la réception
+
         self.ip_label = ctk.CTkLabel(self.root, text="Destinataire :", font=("Arial", 14), text_color="#FFFFFF")
         self.ip_dropdown = ctk.CTkComboBox(
             self.root, values=[self.ip_placeholder], font=("Arial", 14), width=250,
@@ -336,18 +342,26 @@ class FileSharerGUI:
             messagebox.showerror("Erreur", "Aucun fichier ou dossier sélectionné.")
             self.update_status("Erreur : Aucun fichier/dossier sélectionné", "#FF4500")
             return
+        # Afficher le label de progression uniquement pendant l'envoi
+        self.progress_label.pack(pady=10)
         threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001, self.user_name), daemon=True).start()
 
     def _send_file_thread(self, file_path, ip, port, user_name):
+        def update_progress(percentage):
+            self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            send_file(file_path, ip, port, user_name)  # Ajuster send_file pour accepter user_name
+            send_file(file_path, ip, port, user_name, update_progress)
             if file_path.endswith(".zip") and os.path.exists(file_path):
                 os.remove(file_path)
             self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
+            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
-            self.root.after(2000, self.reset_interface)
+            self.root.after(0, self._hide_progress)  # Masquer le label après l'envoi
+
+    def _hide_progress(self):
+        self.progress_label.pack_forget()
 
     def start_receive(self):
         if self.is_receiving:
@@ -362,6 +376,8 @@ class FileSharerGUI:
         self.cancel_flag.clear()
         self.cancel_receive_button.pack(pady=10)
         self.is_receiving = True
+        # Afficher le label de progression uniquement pendant la réception
+        self.progress_label.pack(pady=10)
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -376,6 +392,7 @@ class FileSharerGUI:
                     else:
                         self.update_status("Port occupé après plusieurs tentatives. Relancez l'application.", "#FF4500")
                         self.is_receiving = False
+                        self._hide_progress()  # Masquer si échec
                         self.reset_interface()
                         return
                 else:
@@ -392,19 +409,23 @@ class FileSharerGUI:
             else:
                 self.update_status("Réception annulée.", "#32CD32")
             self.is_receiving = False
+            self._hide_progress()  # Masquer après annulation
             self.reset_interface()
 
     def _receive_file_thread(self, port, cancel_flag):
+        def update_progress(percentage):
+            self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            receive_file(port, cancel_flag)
+            receive_file(port, cancel_flag, update_progress)
             self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
+            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except ReceptionCancelled:
             self.root.after(0, lambda: self.update_status("Réception annulée.", "#32CD32"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
             self.is_receiving = False
-            self.root.after(0, self.reset_interface)
+            self.root.after(0, self._hide_progress)  # Masquer après réception
 
     def reset_interface(self):
         self.ip_label.pack_forget()
@@ -415,6 +436,7 @@ class FileSharerGUI:
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
         self.selected_label.pack_forget()
+        self.progress_label.pack_forget()  # Masquer le label de progression
         self.button_frame.pack(pady=(100, 10))
         self.update_status("Choisissez une action", "#87CEEB")
 

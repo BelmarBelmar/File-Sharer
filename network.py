@@ -49,7 +49,7 @@ def get_local_network():
             print(f"[ERROR] Erreur lors de la détection du réseau : {e}")
             return None
 
-def is_port_open(ip, port, timeout=2.0):
+def is_port_open(ip, port, timeout=0.5):
     """
     Teste si le port est ouvert sur l'IP donnée.
     """

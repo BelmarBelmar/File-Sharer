@@ -5,19 +5,31 @@ from tkinter import messagebox
 from tqdm import tqdm
 from threading import Event
 
+CONFIG_FILE = "user_config.txt"
+
 class ReceptionCancelled(Exception):
     pass
 
 BUFFER_SIZE = 4096
 
-def receive_file(port, cancel_flag):
+def get_user_name():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    else:
+        user_name = input("Entrez votre nom (sauvegardé pour les prochaines utilisations) : ")
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            f.write(user_name)
+        return user_name
+
+def receive_file(port, cancel_flag, update_callback=None):
     """
     Reçoit un fichier à partir d'une connexion sur le port spécifié.
     Retourne True si le fichier est reçu avec succès, False sinon.
     """
+    user_name = get_user_name()
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        # Activer la réutilisation du port
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(("", port))
         server_socket.listen(5)
@@ -27,10 +39,7 @@ def receive_file(port, cancel_flag):
             conn, addr = server_socket.accept()
             print(f"[RÉCEPTEUR] Nouvelle connexion acceptée de {addr}")
 
-            # Résoudre le répertoire personnel
             home_dir = os.path.expanduser("~")
-
-            # Détecter le dossier de téléchargement (Downloads ou Téléchargements)
             download_folders = ["Downloads", "Téléchargements"]
             save_folder_base = None
             for folder in download_folders:
@@ -38,39 +47,33 @@ def receive_file(port, cancel_flag):
                 if os.path.isdir(potential_folder):
                     save_folder_base = potential_folder
                     break
-
             if save_folder_base is None:
-                save_folder_base = home_dir  # Fallback au répertoire personnel
+                save_folder_base = home_dir
 
-            # Chemin final avec sous-dossier files_shared
             save_folder = os.path.join(save_folder_base, "files_shared")
-            # Créer le dossier et ses parents si nécessaire
             os.makedirs(save_folder, exist_ok=True)
 
             try:
-                # Recevoir les métadonnées (nom du fichier, taille, et nom de l'utilisateur)
                 meta = conn.recv(BUFFER_SIZE).decode()
                 if "||" not in meta or meta.count("||") < 2:
                     conn.send("REJECTED".encode())
                     conn.close()
                     continue
-                file_name, file_size, user_name = meta.split("||", 2)  # Sépare en 3 parties max
+                file_name, file_size, sender_name = meta.split("||", 2)
                 file_size = int(file_size)
-                print(f"[RÉCEPTEUR] Fichier proposé par {user_name} : {file_name} ({file_size} octets)")
+                print(f"[RÉCEPTEUR] Fichier proposé par {sender_name} : {file_name} ({file_size} octets)")
 
-                # Demander confirmation à l'utilisateur
                 response = messagebox.askyesno(
                     "Confirmation",
-                    f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {user_name} ({addr[0]}) ?"
+                    f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {sender_name} ?"
                 )
                 if not response:
                     conn.send("REJECTED".encode())
                     conn.close()
-                    print(f"[RÉCEPTEUR] Téléchargement refusé pour {file_name} de {user_name}")
+                    print(f"[RÉCEPTEUR] Téléchargement refusé pour {file_name} de {sender_name}")
                     continue
                 conn.send("OK".encode())
 
-                # Recevoir le fichier
                 file_path = os.path.join(save_folder, file_name)
                 received = 0
                 with open(file_path, "wb") as f, tqdm(
@@ -83,17 +86,20 @@ def receive_file(port, cancel_flag):
                         f.write(data)
                         received += len(data)
                         pbar.update(len(data))
+                        if update_callback:
+                            percentage = (received / file_size) * 100
+                            update_callback(percentage)
 
                 if cancel_flag.is_set():
                     raise ReceptionCancelled("Téléchargement annulé par l'utilisateur")
 
                 conn.close()
                 if received == file_size:
-                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès de {user_name}")
-                    messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé de {user_name}.")
+                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès de {sender_name}")
+                    messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé.")
                 else:
-                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets) de {user_name}")
-                    messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement de {user_name}.")
+                    print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets) de {sender_name}")
+                    messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement.")
 
             except socket.error as e:
                 print(f"[ERREUR] Erreur réseau pour {addr[0]} : {e}")
@@ -103,7 +109,7 @@ def receive_file(port, cancel_flag):
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except ValueError as e:
-                print(f"[ERREUR] Erreur dans les métadonnées pour {addr[0]} : {e} - Données : {meta}")
+                print(f"[ERREUR] Erreur dans les métadonnées pour {addr[0]} : {e} - Données reçues : {meta}")
                 messagebox.showerror("Erreur", f"Erreur dans les métadonnées : {str(e)}")
                 conn.send("REJECTED".encode())
                 conn.close()
