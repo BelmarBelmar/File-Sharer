@@ -12,7 +12,6 @@ import time
 import re
 import socket
 
-
 CONFIG_FILE = "user_config.txt"
 
 class FileSharerGUI:
@@ -114,6 +113,10 @@ class FileSharerGUI:
             self.root, text="Envoyer un dossier", command=self.select_folder,
             fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 14), width=200
         )
+        self.back_button = ctk.CTkButton(
+            self.root, text="Retour", command=self.reset_interface,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 14), width=200
+        )
         self.selected_label = ctk.CTkLabel(self.root, text="", font=("Arial", 12), text_color="#FFFFFF")
 
         # Lancer le serveur socket en arrière-plan
@@ -132,7 +135,7 @@ class FileSharerGUI:
             self.name_window.title("Définir votre nom")
             self.name_window.geometry("300x150")
             default_name = f"User_{self.local_ip.split('.')[-1]}"
-            ctk.CTkLabel(self.name_window, text="Entrez votre nom (sauvegardé pour les prochaines utilisations) :").pack(pady=5)
+            ctk.CTkLabel(self.name_window, text="Entrez votre nom :").pack(pady=5)
             self.name_entry = ctk.CTkEntry(self.name_window, width=200)
             self.name_entry.insert(0, default_name)
             self.name_entry.pack(pady=10)
@@ -186,10 +189,12 @@ class FileSharerGUI:
         self.button_frame.pack_forget()
         self.send_file_button.pack(pady=10)
         self.send_folder_button.pack(pady=10)
+        self.back_button.pack(pady=10)
 
     def select_file(self):
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
+        self.back_button.pack_forget()
         file_path = filedialog.askopenfilename(
             title="Choisir un fichier", initialdir=os.path.expanduser("~/Desktop"),
             filetypes=[("Tous les fichiers", "*.*"), ("Documents", "*.pdf *.docx *.txt"), ("Images", "*.jpg *.png")]
@@ -211,6 +216,7 @@ class FileSharerGUI:
     def select_folder(self):
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
+        self.back_button.pack_forget()
         folder_path = filedialog.askdirectory(
             title="Choisir un dossier", initialdir=os.path.expanduser("~/Desktop")
         )
@@ -343,7 +349,6 @@ class FileSharerGUI:
             messagebox.showerror("Erreur", "Aucun fichier ou dossier sélectionné.")
             self.update_status("Erreur : Aucun fichier/dossier sélectionné", "#FF4500")
             return
-        # Afficher le label de progression uniquement pendant l'envoi
         self.progress_label.pack(pady=10)
         threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001, self.user_name), daemon=True).start()
 
@@ -351,32 +356,31 @@ class FileSharerGUI:
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            success = send_file(file_path, ip, port, user_name, update_progress)
-            if success:
-                if file_path.endswith(".zip") and os.path.exists(file_path):
-                    os.remove(file_path)
-                    self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
-                    self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
-            else:
-                self.root.after(0, lambda: self.update_status("Transfert échoué ou refusé.", "#FF4500"))
+            send_file(file_path, ip, port, user_name, update_progress)
+            if file_path.endswith(".zip") and os.path.exists(file_path):
+                os.remove(file_path)
+            self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
+            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
-            self.root.after(0, self._hide_progress)  # Masquer le label après l'envoi
+            self.root.after(0, self._hide_progress)
 
     def _hide_progress(self):
         self.progress_label.pack_forget()
-
-    """def confirmation_via_gui(file_name, file_size, sender_name):
-        return messagebox.askyesno("Confirmation",
-                                   f"Souhaitez-vous recevoir le fichier '{file_name}' ({file_size} octets) de {sender_name} ?"))
-
-    RECEIVER_CONFIRMATION_CALLBACK = confirmation_via_gui"""
 
     def start_receive(self):
         if self.is_receiving:
             self.update_status("Une réception est déjà en cours. Attendez ou annulez.", "#FF4500")
             return
+
+        # Arrêter proprement un thread précédent s'il existe
+        if self.receive_thread and self.receive_thread.is_alive():
+            self.cancel_flag.set()
+            self.receive_thread.join(timeout=1)  # Attendre 1 seconde pour terminer
+            self.is_receiving = False
+            self.cancel_flag.clear()
+
         self.button_frame.pack_forget()
         self.ip_label.pack_forget()
         self.ip_dropdown.pack_forget()
@@ -385,8 +389,8 @@ class FileSharerGUI:
         self.update_status("En attente d'un fichier...", "#87CEEB")
         self.cancel_flag.clear()
         self.cancel_receive_button.pack(pady=10)
+        self.back_button.pack(pady=10)
         self.is_receiving = True
-        # Afficher le label de progression uniquement pendant la réception
         self.progress_label.pack(pady=10)
         max_attempts = 3
         for attempt in range(max_attempts):
@@ -402,7 +406,7 @@ class FileSharerGUI:
                     else:
                         self.update_status("Port occupé après plusieurs tentatives. Relancez l'application.", "#FF4500")
                         self.is_receiving = False
-                        self._hide_progress()  # Masquer si échec
+                        self._hide_progress()
                         self.reset_interface()
                         return
                 else:
@@ -419,21 +423,17 @@ class FileSharerGUI:
             else:
                 self.update_status("Réception annulée.", "#32CD32")
             self.is_receiving = False
-            self._hide_progress()  # Masquer après annulation
+            self._hide_progress()
             self.reset_interface()
 
     def _receive_file_thread(self, port, cancel_flag):
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
         try:
-            success = receive_file(port, cancel_flag, update_progress)
-            if success:
-                self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
-                self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
-            else:
-                self.root.after(0, lambda: self.update_status("Réception échouée ou annulée.", "#FF4500"))
+            receive_file(port, cancel_flag, update_progress)
+            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except ReceptionCancelled:
-            self.root.after(0, lambda: self.update_status("Réception annulée par l'utilisateur.", "#FF4500"))
+            self.root.after(0, lambda: self.update_status("Réception annulée.", "#32CD32"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
         finally:
@@ -441,6 +441,18 @@ class FileSharerGUI:
             self.root.after(0, self._hide_progress)
 
     def reset_interface(self):
+        # Arrêter le thread de réception s'il est actif
+        if self.receive_thread and self.receive_thread.is_alive():
+            self.cancel_flag.set()
+            self.update_status("Arrêt de la réception en cours...", "#FFA500")
+            self.receive_thread.join(timeout=1)  # Attendre 1 seconde pour terminer
+            if self.receive_thread.is_alive():
+                self.update_status("Annulation forcée du thread de réception.", "#FF4500")
+            else:
+                self.update_status("Réception arrêtée.", "#32CD32")
+            self.is_receiving = False
+            self.cancel_flag.clear()
+
         self.ip_label.pack_forget()
         self.ip_dropdown.pack_forget()
         self.confirm_send_button.pack_forget()
@@ -448,10 +460,13 @@ class FileSharerGUI:
         self.cancel_receive_button.pack_forget()
         self.send_file_button.pack_forget()
         self.send_folder_button.pack_forget()
+        self.back_button.pack_forget()
         self.selected_label.pack_forget()
-        self.progress_label.pack_forget()  # Masquer le label de progression
+        self.progress_label.pack_forget()
         self.button_frame.pack(pady=(100, 10))
-        self.update_status("Choisissez une action", "#87CEEB")
+        self.is_receiving = False  # Réinitialiser l'état de réception
+        self.update_status("Choisissez une action", "#87CEEB")  # Forcer le statut initial
+        self.cancel_flag.clear()  # Réinitialiser le drapeau d'annulation
 
     def show_history(self):
         history_window = ctk.CTkToplevel(self.root)
