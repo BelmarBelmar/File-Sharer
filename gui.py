@@ -365,7 +365,6 @@ class FileSharerGUI:
             send_file(file_path, ip, port, user_name, update_progress)
             if file_path.endswith(".zip") and os.path.exists(file_path):
                 os.remove(file_path)
-            self.root.after(0, lambda: self.update_status("Fichier envoyé avec succès !", "#32CD32"))
             self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"Erreur : {str(e)}", "#FF4500"))
@@ -483,11 +482,14 @@ class FileSharerGUI:
             self.cancel_flag.set()
             self.update_status("Annulation en cours...", "#FFA500")
             self.cancel_receive_button.configure(state="disabled")
-            self.receive_thread.join(timeout=2)
+            # Forcer l'arrêt du thread si nécessaire après un court délai
+            self.receive_thread.join(timeout=0.1)  # Attendre 0.1 seconde max
             if self.receive_thread.is_alive():
-                self.update_status("Annulation forcée, veuillez relancer.", "#FF4500")
+                self.update_status("Annulation forcée du téléchargement.", "#FF4500")
+                # Option pour tuer le thread (non recommandé sauf en dernier recours)
+                # Note : Cela peut causer des problèmes si des ressources (fichiers, sockets) ne sont pas libérées
             else:
-                self.update_status("Réception annulée.", "#32CD32")
+                self.update_status("Réception annulée avec succès.", "#32CD32")
             self.is_receiving = False
             self._hide_progress()
             self.reset_interface()
@@ -600,8 +602,7 @@ class FileSharerGUI:
                         open_button.pack(side="right", padx=5)
 
         # Bouton de retour
-        back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",
-                                    hover_color="#FFA500", font=("Arial", 14), width=200)
+        back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",hover_color="#FFA500", font=("Arial", 14), width=200)
         back_button.pack(pady=10)
 
     def update_status(self, message, color):

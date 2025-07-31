@@ -91,12 +91,16 @@ def receive_file(port, cancel_flag, update_callback=None, save_folder=None):
                             data = conn.recv(BUFFER_SIZE)
                             if not data:
                                 break
+                            if cancel_flag.is_set():  # Vérification avant écriture
+                                raise ReceptionCancelled("Téléchargement annulé par l'utilisateur")
                             f.write(data)
                             received += len(data)
                             pbar.update(len(data))
                             if update_callback:
                                 percentage = (received / file_size) * 100
                                 update_callback(percentage)
+                            if cancel_flag.is_set():  # Vérification après écriture
+                                raise ReceptionCancelled("Téléchargement annulé par l'utilisateur")
 
                     if cancel_flag.is_set():
                         raise ReceptionCancelled("Téléchargement annulé par l'utilisateur")
