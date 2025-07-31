@@ -11,8 +11,10 @@ from threading import Event
 import time
 import re
 import socket
+import subprocess
 
 CONFIG_FILE = "user_config.txt"
+
 
 class FileSharerGUI:
     def __init__(self, root):
@@ -135,7 +137,8 @@ class FileSharerGUI:
             self.name_window.title("Définir votre nom")
             self.name_window.geometry("300x150")
             default_name = f"User_{self.local_ip.split('.')[-1]}"
-            ctk.CTkLabel(self.name_window, text="Entrez votre nom :").pack(pady=5)
+            ctk.CTkLabel(self.name_window,
+                         text="Entrez votre nom (sauvegardé pour les prochaines utilisations) :").pack(pady=5)
             self.name_entry = ctk.CTkEntry(self.name_window, width=200)
             self.name_entry.insert(0, default_name)
             self.name_entry.pack(pady=10)
@@ -164,7 +167,8 @@ class FileSharerGUI:
         name_entry = ctk.CTkEntry(self.name_window, width=200)
         name_entry.insert(0, self.user_name or f"User_{self.local_ip.split('.')[-1]}")
         name_entry.pack(pady=10)
-        ctk.CTkButton(self.name_window, text="Valider", command=lambda: self._update_name(name_entry.get())).pack(pady=10)
+        ctk.CTkButton(self.name_window, text="Valider", command=lambda: self._update_name(name_entry.get())).pack(
+            pady=10)
         self.name_window.grab_set()
         self.root.wait_window(self.name_window)
 
@@ -350,11 +354,13 @@ class FileSharerGUI:
             self.update_status("Erreur : Aucun fichier/dossier sélectionné", "#FF4500")
             return
         self.progress_label.pack(pady=10)
-        threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001, self.user_name), daemon=True).start()
+        threading.Thread(target=self._send_file_thread, args=(self.file_path, target_ip, 5001, self.user_name),
+                         daemon=True).start()
 
     def _send_file_thread(self, file_path, ip, port, user_name):
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
+
         try:
             send_file(file_path, ip, port, user_name, update_progress)
             if file_path.endswith(".zip") and os.path.exists(file_path):
@@ -381,6 +387,66 @@ class FileSharerGUI:
             self.is_receiving = False
             self.cancel_flag.clear()
 
+        # Fenêtre pour choisir entre dossier par défaut et personnalisé
+        choice_window = ctk.CTkToplevel(self.root)
+        choice_window.title("Choisir un dossier")
+        choice_window.geometry("300x150")
+
+        # Suppression de choice_window.grab_set() pour éviter l'erreur
+
+        def use_default_folder():
+            save_folder = None  # Utilisera le dossier par défaut dans receiver.py
+            choice_window.destroy()
+            self._proceed_receive(save_folder)
+
+        def choose_custom_folder():
+            save_folder = filedialog.askdirectory(
+                title="Choisir un dossier pour sauvegarder les fichiers reçus",
+                initialdir=os.path.expanduser("~/")
+            )
+            if save_folder:
+                choice_window.destroy()
+                self._proceed_receive(save_folder)
+            else:
+                messagebox.showwarning("Attention", "Aucun dossier sélectionné, réception annulée.")
+                choice_window.destroy()
+
+        ctk.CTkLabel(choice_window, text="Choisir où sauvegarder les fichiers :", font=("Arial", 12),
+                     text_color="#FFFFFF").pack(pady=10)
+        ctk.CTkButton(choice_window, text="Utiliser le dossier par défaut (files_shared)", command=use_default_folder,
+                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
+        ctk.CTkButton(choice_window, text="Choisir un dossier personnalisé", command=choose_custom_folder,
+                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
+
+        # Utiliser wait_window au lieu de grab_set pour attendre la fermeture de la fenêtre
+        self.root.wait_window(choice_window)
+        def use_default_folder():
+            save_folder = None  # Utilisera le dossier par défaut dans receiver.py
+            choice_window.destroy()
+            self._proceed_receive(save_folder)
+
+        def choose_custom_folder():
+            save_folder = filedialog.askdirectory(
+                title="Choisir un dossier pour sauvegarder les fichiers reçus",
+                initialdir=os.path.expanduser("~/")
+            )
+            if save_folder:
+                choice_window.destroy()
+                self._proceed_receive(save_folder)
+            else:
+                messagebox.showwarning("Attention", "Aucun dossier sélectionné, réception annulée.")
+                choice_window.destroy()
+
+        ctk.CTkLabel(choice_window, text="Choisir où sauvegarder les fichiers :", font=("Arial", 12),
+                     text_color="#FFFFFF").pack(pady=10)
+        ctk.CTkButton(choice_window, text="Utiliser le dossier par défaut (files_shared)", command=use_default_folder,
+                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
+        ctk.CTkButton(choice_window, text="Choisir un dossier personnalisé", command=choose_custom_folder,
+                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
+
+        self.root.wait_window(choice_window)
+
+    def _proceed_receive(self, save_folder):
         self.button_frame.pack_forget()
         self.ip_label.pack_forget()
         self.ip_dropdown.pack_forget()
@@ -395,7 +461,8 @@ class FileSharerGUI:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                self.receive_thread = threading.Thread(target=self._receive_file_thread, args=(5001, self.cancel_flag), daemon=True)
+                self.receive_thread = threading.Thread(target=self._receive_file_thread,
+                                                       args=(5001, self.cancel_flag, save_folder), daemon=True)
                 self.receive_thread.start()
                 break
             except OSError as e:
@@ -426,11 +493,13 @@ class FileSharerGUI:
             self._hide_progress()
             self.reset_interface()
 
-    def _receive_file_thread(self, port, cancel_flag):
+    def _receive_file_thread(self, port, cancel_flag, save_folder):
         def update_progress(percentage):
             self.root.after(0, lambda: self.progress_label.configure(text=f"Progression : {percentage:.1f}%"))
+
         try:
-            receive_file(port, cancel_flag, update_progress)
+            receive_file(port, cancel_flag, update_progress, save_folder)
+            self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
             self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except ReceptionCancelled:
             self.root.after(0, lambda: self.update_status("Réception annulée.", "#32CD32"))
@@ -471,26 +540,72 @@ class FileSharerGUI:
     def show_history(self):
         history_window = ctk.CTkToplevel(self.root)
         history_window.title("Historique des transferts")
-        history_window.geometry("500x300")
+        history_window.geometry("600x400")
         history_window.resizable(False, False)
 
-        history_text = ctk.CTkTextbox(
-            history_window, font=("Arial", 12), width=450, height=250,
-            fg_color="#2B2B2B", text_color="#FFFFFF"
-        )
-        history_text.pack(pady=10, padx=10)
+        # Frame pour contenir les entrées d'historique
+        history_frame = ctk.CTkFrame(history_window)
+        history_frame.pack(pady=10, padx=10, fill="both", expand=True)
 
         history = load_history()
         if not history:
-            history_text.insert("end", "Aucun transfert dans l'historique.")
+            ctk.CTkLabel(history_frame, text="Aucun fichier reçu dans l'historique.", font=("Arial", 12),
+                         text_color="#FFFFFF").pack(pady=5)
         else:
-            for entry in history:
-                text = f"{entry['timestamp']} - {entry['operation'].capitalize()} : {entry['file_name']} ({entry['ip']})\n"
-                history_text.insert("end", text)
-        history_text.configure(state="disabled")
+            received_files = [entry for entry in history if entry.get('operation') == 'received']
+            if not received_files:
+                ctk.CTkLabel(history_frame, text="Aucun fichier reçu dans l'historique.", font=("Arial", 12),
+                             text_color="#FFFFFF").pack(pady=5)
+            else:
+                for entry in received_files:
+                    frame = ctk.CTkFrame(history_frame)
+                    frame.pack(fill="x", pady=2, padx=5)
+
+                    file_name = entry['file_name']
+                    label = ctk.CTkLabel(frame, text=file_name, font=("Arial", 12), text_color="#FFFFFF")
+                    label.pack(side="left", padx=5)
+
+                    # Bouton pour ouvrir le fichier
+                    def open_file(file_name=file_name):
+                        home_dir = os.path.expanduser("~")
+                        download_folders = ["Downloads", "Téléchargements"]
+                        save_folder_base = None
+                        for folder in download_folders:
+                            potential_folder = os.path.join(home_dir, folder)
+                            if os.path.isdir(potential_folder):
+                                save_folder_base = potential_folder
+                                break
+                        if save_folder_base is None:
+                            save_folder_base = home_dir
+                        save_folder = os.path.join(save_folder_base, "files_shared")
+                        file_path = os.path.join(save_folder, file_name)
+                        print(f"Chemin vérifié : {file_path}")  # Pour débogage
+                        if os.path.exists(file_path):
+                            try:
+                                if os.name == 'nt':  # Windows
+                                    os.startfile(file_path)
+                                else:  # macOS/Linux
+                                    subprocess.run([
+                                                       'open' if os.name == 'posix' and os.uname().sysname == 'Darwin' else 'xdg-open',
+                                                       file_path])
+                            except Exception as e:
+                                messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
+                        else:
+                            messagebox.showwarning("Attention",
+                                                   f"Le fichier {file_name} n'a pas été trouvé à {file_path}.")
+
+                    open_button = ctk.CTkButton(frame, text="Ouvrir", command=open_file, fg_color="#1E90FF",
+                                                hover_color="#4682B4", font=("Arial", 12), width=60)
+                    open_button.pack(side="right", padx=5)
+
+        # Bouton de retour
+        back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",
+                                    hover_color="#FFA500", font=("Arial", 14), width=200)
+        back_button.pack(pady=10)
 
     def update_status(self, message, color):
         self.status_label.configure(text=message, text_color=color)
+
 
 if __name__ == "__main__":
     root = ctk.CTk()

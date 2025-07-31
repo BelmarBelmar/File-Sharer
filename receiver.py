@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import socket
-from tkinter import messagebox
+from tkinter import messagebox, Tk, filedialog
 from tqdm import tqdm
 from threading import Event
 
@@ -22,7 +22,7 @@ def get_user_name():
             f.write(user_name)
         return user_name
 
-def receive_file(port, cancel_flag, update_callback=None):
+def receive_file(port, cancel_flag, update_callback=None, save_folder=None):
     """
     Reçoit un fichier à partir d'une connexion sur le port spécifié.
     Retourne True si le fichier est reçu avec succès, False sinon.
@@ -31,7 +31,7 @@ def receive_file(port, cancel_flag, update_callback=None):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.settimeout(1.0)  # Ajout d'un timeout de 1 seconde pour permettre une vérification régulière
+        server_socket.settimeout(1.0)  # Timeout pour permettre une vérification régulière
         server_socket.bind(("", port))
         server_socket.listen(5)
         print(f"[RÉCEPTEUR] En attente de connexion sur le port {port} sur toutes les interfaces...")
@@ -41,19 +41,22 @@ def receive_file(port, cancel_flag, update_callback=None):
                 conn, addr = server_socket.accept()
                 print(f"[RÉCEPTEUR] Nouvelle connexion acceptée de {addr}")
 
-                home_dir = os.path.expanduser("~")
-                download_folders = ["Downloads", "Téléchargements"]
-                save_folder_base = None
-                for folder in download_folders:
-                    potential_folder = os.path.join(home_dir, folder)
-                    if os.path.isdir(potential_folder):
-                        save_folder_base = potential_folder
-                        break
-                if save_folder_base is None:
-                    save_folder_base = home_dir
-
-                save_folder = os.path.join(save_folder_base, "files_shared")
-                os.makedirs(save_folder, exist_ok=True)
+                # Utiliser le dossier personnalisé si fourni, sinon proposer un dossier par défaut
+                if save_folder and os.path.isdir(save_folder):
+                    save_folder_base = save_folder
+                else:
+                    home_dir = os.path.expanduser("~")
+                    download_folders = ["Downloads", "Téléchargements"]
+                    save_folder_base = None
+                    for folder in download_folders:
+                        potential_folder = os.path.join(home_dir, folder)
+                        if os.path.isdir(potential_folder):
+                            save_folder_base = potential_folder
+                            break
+                    if save_folder_base is None:
+                        save_folder_base = home_dir
+                    save_folder_base = os.path.join(save_folder_base, "files_shared")
+                    os.makedirs(save_folder_base, exist_ok=True)
 
                 try:
                     meta = conn.recv(BUFFER_SIZE).decode()
@@ -76,7 +79,7 @@ def receive_file(port, cancel_flag, update_callback=None):
                         continue
                     conn.send("OK".encode())
 
-                    file_path = os.path.join(save_folder, file_name)
+                    file_path = os.path.join(save_folder_base, file_name)
                     received = 0
                     with open(file_path, "wb") as f, tqdm(
                             total=file_size, unit="o", unit_scale=True, desc="Téléchargement en cours"
@@ -100,7 +103,7 @@ def receive_file(port, cancel_flag, update_callback=None):
                     conn.close()
                     if received == file_size:
                         print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé avec succès de {sender_name}")
-                        messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé.")
+                        messagebox.showinfo("Succès", f"Fichier {file_name} téléchargé et sauvegardé dans {save_folder_base}.")
                     else:
                         print(f"[RÉCEPTEUR] Fichier {file_name} téléchargé partiellement ({received}/{file_size} octets) de {sender_name}")
                         messagebox.showwarning("Attention", f"Fichier {file_name} téléchargé partiellement.")
