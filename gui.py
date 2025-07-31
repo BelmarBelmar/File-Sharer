@@ -498,8 +498,6 @@ class FileSharerGUI:
 
         try:
             receive_file(port, cancel_flag, update_progress, save_folder)
-            self.root.after(0, lambda: self.update_status("Fichier reçu avec succès !", "#32CD32"))
-            self.root.after(0, lambda: self.progress_label.configure(text="Progression : 100%"))
         except ReceptionCancelled:
             self.root.after(0, lambda: self.update_status("Réception annulée.", "#32CD32"))
         except Exception as e:
