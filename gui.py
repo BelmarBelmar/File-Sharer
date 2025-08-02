@@ -138,7 +138,7 @@ class FileSharerGUI:
             self.name_window.geometry("300x150")
             default_name = f"User_{self.local_ip.split('.')[-1]}"
             ctk.CTkLabel(self.name_window,
-                         text="Entrez votre nom (sauvegardé pour les prochaines utilisations) :").pack(pady=5)
+                         text="Entrez votre nom :").pack(pady=5)
             self.name_entry = ctk.CTkEntry(self.name_window, width=200)
             self.name_entry.insert(0, default_name)
             self.name_entry.pack(pady=10)
