@@ -214,6 +214,11 @@ class FileSharerGUI:
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
+        self.rescan_button = ctk.CTkButton(
+            self.root, text="Nouveau Scan", command=self.rescan_networks,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 14), width=200
+        )
+        self.rescan_button.pack(pady=10)
         self.cancel_button.pack(pady=10)
         self.update_status("Choisissez un appareil ou scannez le réseau...", "#87CEEB")
 
@@ -242,6 +247,11 @@ class FileSharerGUI:
         self.ip_label.pack(pady=10)
         self.ip_dropdown.pack(pady=10)
         self.confirm_send_button.pack(pady=10)
+        self.rescan_button = ctk.CTkButton(
+            self.root, text="Nouveau Scan", command=self.rescan_networks,
+            fg_color="#FFD700", hover_color="#FFA500", font=("Arial", 14), width=200
+        )
+        self.rescan_button.pack(pady=10)
         self.cancel_button.pack(pady=10)
         self.update_status("Choisissez un appareil ou scannez le réseau...", "#87CEEB")
 
@@ -391,34 +401,6 @@ class FileSharerGUI:
         choice_window.title("Choisir un dossier")
         choice_window.geometry("300x150")
 
-        # Suppression de choice_window.grab_set() pour éviter l'erreur
-
-        def use_default_folder():
-            save_folder = None  # Utilisera le dossier par défaut dans receiver.py
-            choice_window.destroy()
-            self._proceed_receive(save_folder)
-
-        def choose_custom_folder():
-            save_folder = filedialog.askdirectory(
-                title="Choisir un dossier pour sauvegarder les fichiers reçus",
-                initialdir=os.path.expanduser("~/")
-            )
-            if save_folder:
-                choice_window.destroy()
-                self._proceed_receive(save_folder)
-            else:
-                messagebox.showwarning("Attention", "Aucun dossier sélectionné, réception annulée.")
-                choice_window.destroy()
-
-        ctk.CTkLabel(choice_window, text="Choisir où sauvegarder les fichiers :", font=("Arial", 12),
-                     text_color="#FFFFFF").pack(pady=10)
-        ctk.CTkButton(choice_window, text="Utiliser le dossier par défaut (files_shared)", command=use_default_folder,
-                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
-        ctk.CTkButton(choice_window, text="Choisir un dossier personnalisé", command=choose_custom_folder,
-                      fg_color="#1E90FF", hover_color="#4682B4", font=("Arial", 12), width=250).pack(pady=5)
-
-        # Utiliser wait_window au lieu de grab_set pour attendre la fermeture de la fenêtre
-        self.root.wait_window(choice_window)
         def use_default_folder():
             save_folder = None  # Utilisera le dossier par défaut dans receiver.py
             choice_window.destroy()
@@ -460,7 +442,7 @@ class FileSharerGUI:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                self.receive_thread = threading.Thread(target=self._receive_file_thread,args=(5001, self.cancel_flag, save_folder), daemon=True)
+                self.receive_thread = threading.Thread(target=self._receive_file_thread, args=(5001, self.cancel_flag, save_folder), daemon=True)
                 self.receive_thread.start()
                 break
             except OSError as e:
@@ -482,12 +464,9 @@ class FileSharerGUI:
             self.cancel_flag.set()
             self.update_status("Annulation en cours...", "#FFA500")
             self.cancel_receive_button.configure(state="disabled")
-            # Forcer l'arrêt du thread si nécessaire après un court délai
             self.receive_thread.join(timeout=0.1)  # Attendre 0.1 seconde max
             if self.receive_thread.is_alive():
                 self.update_status("Annulation forcée du téléchargement.", "#FF4500")
-                # Option pour tuer le thread (non recommandé sauf en dernier recours)
-                # Note : Cela peut causer des problèmes si des ressources (fichiers, sockets) ne sont pas libérées
             else:
                 self.update_status("Réception annulée avec succès.", "#32CD32")
             self.is_receiving = False
@@ -531,6 +510,8 @@ class FileSharerGUI:
         self.back_button.pack_forget()
         self.selected_label.pack_forget()
         self.progress_label.pack_forget()
+        if hasattr(self, 'rescan_button') and self.rescan_button.winfo_exists():
+            self.rescan_button.pack_forget()
         self.button_frame.pack(pady=(100, 10))
         self.is_receiving = False  # Réinitialiser l'état de réception
         self.update_status("Choisissez une action", "#87CEEB")  # Forcer le statut initial
@@ -602,14 +583,16 @@ class FileSharerGUI:
                         open_button.pack(side="right", padx=5)
 
         # Bouton de retour
-        back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",hover_color="#FFA500", font=("Arial", 14), width=200)
+        back_button = ctk.CTkButton(history_window, text="Retour", command=history_window.destroy, fg_color="#FFD700",
+                                    hover_color="#FFA500", font=("Arial", 14), width=200)
         back_button.pack(pady=10)
 
     def update_status(self, message, color):
         self.status_label.configure(text=message, text_color=color)
 
+    def rescan_networks(self):
+        self.update_status("Nouveau scan en cours...", "#87CEEB")
+        self.scan_button.configure(state="disabled")
+        threading.Thread(target=self._perform_auto_scan, daemon=True).start()
 
-if __name__ == "__main__":
-    root = ctk.CTk()
-    app = FileSharerGUI(root)
-    root.mainloop()
+
