@@ -11,7 +11,7 @@ def get_user_name():
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             return f.read().strip()
     else:
-        user_name = input("Entrez votre nom (sauvegardé pour les prochaines utilisations) : ")
+        user_name = input("Entrez votre nom : ")
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             f.write(user_name)
         return user_name
